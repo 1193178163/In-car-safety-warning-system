@@ -1,0 +1,148 @@
+C51 COMPILER V9.57.0.0   SIM800                                                            10/20/2020 17:22:58 PAGE 1   
+
+
+C51 COMPILER V9.57.0.0, COMPILATION OF MODULE SIM800
+OBJECT MODULE PLACED IN .\Objects\SIM800.obj
+COMPILER INVOKED BY: C:\Keil_v5\C51\BIN\C51.EXE SIM800.c COMPACT OPTIMIZE(9,SPEED) BROWSE DEBUG OBJECTEXTEND PRINT(.\Lis
+                    -tings\SIM800.lst) TABS(2) OBJECT(.\Objects\SIM800.obj)
+
+line level    source
+
+   1          #include "SIM800.h"
+   2          #include "uart.h"
+   3          
+   4          //常量
+   5          #define Success 1U
+   6          #define Failure 0U
+   7          
+   8          //定义变量
+   9          unsigned long  Time_Cont = 0;       //定时器计数器
+  10          
+  11          
+  12          
+  13          
+  14          void sendwarming(char phoneNumber[],char msg[])
+  15          {       
+  16   1      //  char phoneNumber[] = "17620042017";   //替换成需要被拨打电话的号码
+  17   1      //  char msg[] = "";    //短信内容  
+  18   1          
+  19   1        if (sendCommand("AT\r\n", "OK\r\n", 3000, 10) == Success);
+  20   1        else errorLog();
+  21   1        delay_ms_SIM(10);
+  22   1      
+  23   1        if (sendCommand("AT+CPIN?\r\n", "READY", 1000, 10) == Success);
+  24   1        else errorLog();
+  25   1        delay_ms_SIM(10);
+  26   1      
+  27   1      
+  28   1        if (sendCommand("AT+CMGF=1\r\n", "OK\r\n", 1000, 10) == Success);
+  29   1        else errorLog();
+  30   1        delay_ms_SIM(10);
+  31   1      
+  32   1        if (sendCommand("AT+CSMP=17,167,0,8\r\n", "OK\r\n", 3000, 10) == Success);
+  33   1        else errorLog();
+  34   1        delay_ms_SIM(10);
+  35   1      
+  36   1        if (sendCommand("AT+CSCS=\"GSM\"\r\n", "OK\r\n", 1000, 10) == Success);
+  37   1        else errorLog();
+  38   1        delay_ms_SIM(10);
+  39   1      
+  40   1        sendMessage(phoneNumber,msg);   //发送短信
+  41   1      
+  42   1      }
+  43          
+  44          
+  45          
+  46          void sendMessage(char *number,char *msg)
+  47          {
+  48   1        xdata char send_buf[20] = {0};
+  49   1        memset(send_buf, 0, 20);    //清空
+  50   1        strcpy(send_buf, "AT+CMGS=\"");
+  51   1        strcat(send_buf, number);
+  52   1        strcat(send_buf, "\"\r\n");
+  53   1        if (sendCommand(send_buf, ">", 3000, 10) == Success);
+  54   1        else errorLog();
+C51 COMPILER V9.57.0.0   SIM800                                                            10/20/2020 17:22:58 PAGE 2   
+
+  55   1      
+  56   1        if (sendCommand(msg, msg, 3000, 10) == Success);
+  57   1        else errorLog();
+  58   1      
+  59   1        memset(send_buf, 0, 40);    //清空
+  60   1        send_buf[0] = 0x1a;
+  61   1        send_buf[1] = '\0';
+  62   1        if (sendCommand(send_buf, "OK\r\n", 10000, 5) == Success);
+  63   1        else errorLog();
+  64   1      }
+  65          
+  66          
+  67          void errorLog()
+  68          {
+  69   1        while (1)
+  70   1        {
+  71   2            if (sendCommand("AT\r\n", "OK\r\n", 100, 10) == Success)
+  72   2          {
+  73   3            soft_reset();
+  74   3          }
+  75   2          delay_ms_SIM(200);
+  76   2        }
+  77   1      }
+  78          
+  79          void soft_reset(void)  //制造重启命令
+  80          {
+  81   1         ((void (code *) (void)) 0x0000) ();
+  82   1      }
+  83          
+  84          unsigned int sendCommand(char *Command, char *Response, unsigned long Timeout, unsigned char Retry)
+  85          {
+  86   1        unsigned char n;
+  87   1        CLR_Buf();
+  88   1        for (n = 0; n < Retry; n++)
+  89   1        {
+  90   2          SendString(Command);    //发送GPRS指令
+  91   2      
+  92   2          Time_Cont = 0;
+  93   2          while (Time_Cont < Timeout)
+  94   2          {
+  95   3            delay_ms_SIM(100);
+  96   3            Time_Cont += 100;
+  97   3            if (strstr(Rec_Buf, Response) != NULL)
+  98   3            {
+  99   4              
+ 100   4              CLR_Buf();
+ 101   4              return Success;
+ 102   4            }
+ 103   3            
+ 104   3          }
+ 105   2          Time_Cont = 0;
+ 106   2        }
+ 107   1        
+ 108   1        CLR_Buf();
+ 109   1        return Failure;
+ 110   1      }
+ 111          
+ 112          //****************************************************
+ 113          //MS延时函数
+ 114          //****************************************************
+ 115          void delay_ms_SIM(unsigned int n)
+ 116          {
+C51 COMPILER V9.57.0.0   SIM800                                                            10/20/2020 17:22:58 PAGE 3   
+
+ 117   1        unsigned int  i,j;
+ 118   1          for(i=0;i<n;i++)
+ 119   1            for(j=0;j<114;j++);
+ 120   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    724    ----
+   CONSTANT SIZE    =    112    ----
+   XDATA SIZE       =   ----      20
+   PDATA SIZE       =      4      24
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

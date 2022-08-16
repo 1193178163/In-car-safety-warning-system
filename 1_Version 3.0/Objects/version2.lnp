@@ -1,0 +1,8 @@
+".\Objects\DS18B20.obj",
+".\Objects\LCD.obj",
+".\Objects\main.obj",
+".\Objects\SGP30.obj",
+".\Objects\uart.obj",
+".\Objects\SIM800.obj" 
+TO ".\Objects\version2" 
+PRINT(".\Listings\version2.m51") RAMSIZE(256) 

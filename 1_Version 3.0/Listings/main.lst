@@ -1,0 +1,278 @@
+C51 COMPILER V9.57.0.0   MAIN                                                              10/20/2020 17:22:57 PAGE 1   
+
+
+C51 COMPILER V9.57.0.0, COMPILATION OF MODULE MAIN
+OBJECT MODULE PLACED IN .\Objects\main.obj
+COMPILER INVOKED BY: C:\Keil_v5\C51\BIN\C51.EXE main.c COMPACT OPTIMIZE(9,SPEED) BROWSE DEBUG OBJECTEXTEND PRINT(.\Listi
+                    -ngs\main.lst) TABS(2) OBJECT(.\Objects\main.obj)
+
+line level    source
+
+   1          #include <main.h>
+   2          #include <LCD.h>
+   3          #include "SGP30.h"
+   4          #include "SIM800.h"
+   5          #include <DS18B20.h>
+   6          #include "uart.h"
+   7          
+   8          
+   9          sbit Key1=P3^4;  //开关报警器
+  10          sbit Key2=P3^5;  //打开红外检测
+  11          sbit Buzzer=P2^4;//蜂鸣器（低电平触发）
+  12          sbit HC_SR501=P3^2;//红外 ，检测到活动人体时， P3^2将接收到高
+  13          sbit C2H5OH=P1^7; //酒精浓度检测，通过调节电位器控制报警阈值。电位器电阻通过公式计算
+  14          sbit pie=P1^6;//树莓派检测驾驶员疲惫时发出高电平
+  15          
+  16          
+  17            
+  18          void delay_ms_main(u16 ms)               
+  19          {
+  20   1        u16 a,b;
+  21   1        for(a=ms;a>0;a--)
+  22   1          for(b=114;b>0;b--);
+  23   1      }
+  24          void init()    //初始化函数
+  25          {
+  26   1        TMOD=0x01; //定时器T0为工作方式1
+  27   1        TH0=(65536-46080)/256;    //晶振为11.0592M时，定时器0溢出20次恰好为1s
+  28   1        TL0=(65536-46080)%256;          //定时器0
+  29   1        ET0=1;    //打开定时器0中断允许开关      
+  30   1        TR0=1;    //启动定时器0
+  31   1        EA=1;   //打开中断总开关
+  32   1        pie=0;
+  33   1        
+  34   1      }
+  35          
+  36          u8 siren=1,n=0,f=0,t=0;  //siren警报器，值为1时开启报警装置.  n 定时器用于循环函数。f 定时器和timer_functi
+             -on_exits共用于红外检测
+  37          u16 CO2Data;//定义CO2浓度变量
+  38          float temp;
+  39          void timer_function_exits(){
+  40   1          char msg[]="Human body detected in the car";    //短信内容  
+  41   1          
+  42   1          EA=0;
+  43   1          Buzzer=1;
+  44   1          if(f==1){
+  45   2          f=0;
+  46   2          init_lcd();
+  47   2          write_com(0x83);
+  48   2          lcd_display("Human body");
+  49   2          write_com(0xC4);
+  50   2          lcd_display("detected");
+  51   2          delay_ms_main(1500);
+  52   2          init_lcd();
+  53   2          write_com(0xC4);
+C51 COMPILER V9.57.0.0   MAIN                                                              10/20/2020 17:22:57 PAGE 2   
+
+  54   2          lcd_display("sending..");
+  55   2          EA=1;
+  56   2            TR0=0;
+  57   2          Uart_Init();
+  58   2          sendwarming("17620042017",msg);
+  59   2            TR0=1;
+  60   2            
+  61   2          EA=0;
+  62   2          init_lcd();
+  63   2          write_com(0xC4);
+  64   2          lcd_display("Alert sent");    }
+  65   1          EA=1;
+  66   1        
+  67   1          if(t==1){
+  68   2            t=0;
+  69   2          init_lcd();
+  70   2          /*显示英文Temp：*/
+  71   2          lcd_pos(0,0);
+  72   2          lcd_display("Temp:");
+  73   2          /*显示 CO2：*/
+  74   2          lcd_pos(1,1);           
+  75   2          lcd_display("CO2:"); 
+  76   2          }
+  77   1      
+  78   1      }
+  79          
+  80          
+  81          void display_data()
+  82          {
+  83   1          u8 buf[6]={0}; 
+  84   1          u32 sgp30_dat;   //400~60000ppm,本程序只检测400~9999ppm
+  85   1          
+  86   1      
+  87   1      
+  88   1          SGP30_Init();   //初始化SGP30
+  89   1      
+  90   1      
+  91   1          while(1)
+  92   1        {
+  93   2          EA=0; //关闭中断，防止中断干扰数据读取
+  94   2          /*读取温度数值并显示*/
+  95   2          temp=ReadTemp();//读取温度
+  96   2          sprintf(buf,"%.2f",temp);  //温度数值装入数组
+  97   2          EA=1;
+  98   2          delay_ms_main(100);  //给定时器中断进入
+  99   2          timer_function_exits();  //进入检测是否需要发信报警
+ 100   2          EA=0;
+ 101   2          write_com(0x86);
+ 102   2          lcd_display(buf);//显示温度数值
+ 103   2          lcd_pos(0,12);
+ 104   2          write_data(0xdf);       //显示字符“°” ASCILL即为0xdf
+ 105   2          lcd_pos(0,13);      
+ 106   2          write_data(0x43);      // 显示字符“C” ASCILL即为0x43
+ 107   2          EA=1;
+ 108   2          delay_ms_main(100);  //给定时器中断进入
+ 109   2          timer_function_exits();  //进入检测是否需要发信报警
+ 110   2          EA=0 ;
+ 111   2          /*读取CO2数值并显示*/
+ 112   2          SGP30_Write(0x20,0x08);
+ 113   2          (u32)sgp30_dat = (u32)SGP30_Read();       //读取SGP30的值
+ 114   2          CO2Data = (sgp30_dat & 0xffff0000) >> 16; //取出CO2浓度值
+ 115   2          //TVOCData = sgp30_dat & 0x0000ffff;      //取出TVOC值
+C51 COMPILER V9.57.0.0   MAIN                                                              10/20/2020 17:22:57 PAGE 3   
+
+ 116   2          sprintf(buf,"%d",CO2Data);                //CO2数值装入数组
+ 117   2          EA=1;
+ 118   2              if(temp>=30&&siren==1)    //温度高于设置报警的温度
+ 119   2          {
+ 120   3            Buzzer=0;               //蜂鸣器打开
+ 121   3            write_com(0x8F);
+ 122   3            lcd_display("<");
+ 123   3          }
+ 124   2              if(CO2Data>=1000&&siren==1)   //温度高于设置报警的温度
+ 125   2          {
+ 126   3            Buzzer=0;               //蜂鸣器打开
+ 127   3            write_com(0xCF);
+ 128   3            lcd_display("<");
+ 129   3          }
+ 130   2          delay_ms_main(300);  //给定时器中断进入
+ 131   2          timer_function_exits();  //进入检测是否需要发信报警
+ 132   2          EA=0;
+ 133   2      
+ 134   2      
+ 135   2          if(400<=CO2Data<1000)       //选择符号显示的位置
+ 136   2          {write_com(0xC9); lcd_display(" ppm "); write_com(0xC6); lcd_display(buf);}
+ 137   2          else if(1000<=CO2Data<10000)
+ 138   2          {write_com(0xCA); lcd_display(" ppm "); write_com(0xC6); lcd_display(buf);}
+ 139   2          else                  
+ 140   2          {write_com(0xC6); lcd_display("error   ");  }
+ 141   2      
+ 142   2      
+ 143   2          EA=1;
+ 144   2      
+ 145   2          delay_ms_main(200);
+ 146   2          write_com(0x8F);
+ 147   2          lcd_display(" ");
+ 148   2          write_com(0xCF);
+ 149   2          lcd_display(" ");
+ 150   2          Buzzer=1;               //蜂鸣器关闭
+ 151   2          timer_function_exits();  //进入检测是否需要发信报警
+ 152   2      
+ 153   2        }
+ 154   1        
+ 155   1      
+ 156   1      }
+ 157          
+ 158          
+ 159          void  time1_int(void) interrupt 1  //定时器函数
+ 160          {
+ 161   1        TH0=(65536-46080)/256;           //晶振为11.0592M时，定时器0溢出20次恰好为1s
+ 162   1        TL0=(65536-46080)%256;           //给定时器0重新赋初值
+ 163   1            
+ 164   1          if(Key1==0){
+ 165   2              delay_ms_main(10);  //防抖动
+ 166   2              if(Key1==0){
+ 167   3                while(Key1==0);  //防长按
+ 168   3                Buzzer=1;        //关闭蜂鸣器
+ 169   3                Buzzer=0;
+ 170   3                delay_ms_main(150);
+ 171   3                Buzzer=1; 
+ 172   3                siren=~siren;    //警报模式转换（开→关，关→开）
+ 173   3              }
+ 174   2            }
+ 175   1        
+ 176   1          if(Key2==0){//红外检测按钮，按下后相当于汽车熄火
+ 177   2              delay_ms_main(10);  //防抖动
+C51 COMPILER V9.57.0.0   MAIN                                                              10/20/2020 17:22:57 PAGE 4   
+
+ 178   2              if(Key2==0){
+ 179   3                while(Key2==0);  //防长按
+ 180   3                Buzzer=1;
+ 181   3                Buzzer=0;
+ 182   3                delay_ms_main(150);
+ 183   3                Buzzer=1; 
+ 184   3                t=1;  //t=1则出定时器中断后显示Temp：和CO2
+ 185   3                
+ 186   3                for(n=0;n<25;n++){
+ 187   4                  init_lcd();
+ 188   4                  write_com(0xC4);
+ 189   4                  lcd_interdisplay("Checking..");
+ 190   4                  if(HC_SR501==0){f=1; break;}          //检测到人
+ 191   4                    delay_ms_main(320);}} } 
+ 192   1      
+ 193   1          if(C2H5OH==0){
+ 194   2            delay_ms_main(3000);
+ 195   2            if(C2H5OH==0){
+ 196   3              t=1;
+ 197   3              init_lcd();
+ 198   3              Buzzer=0;
+ 199   3              write_com(0x81);
+ 200   3              lcd_interdisplay("Warning: high");
+ 201   3              write_com(0xC1);
+ 202   3              lcd_interdisplay("alcohol content");
+ 203   3              delay_ms_main(1600);
+ 204   3              Buzzer=1;
+ 205   3            }
+ 206   2          }
+ 207   1          
+ 208   1          if (pie==1){
+ 209   2              t=1;
+ 210   2              pie=0;
+ 211   2              init_lcd();
+ 212   2              Buzzer=0;
+ 213   2              write_com(0x81);
+ 214   2              lcd_interdisplay("Please don't ");
+ 215   2              write_com(0xC1);
+ 216   2              lcd_interdisplay("drive tired");
+ 217   2              delay_ms_main(3000);
+ 218   2              Buzzer=1;
+ 219   2          }
+ 220   1          
+ 221   1          
+ 222   1            
+ 223   1      }
+ 224          
+ 225          
+ 226          
+ 227          
+ 228          void main()
+ 229          { 
+ 230   1          init();   //初始化
+ 231   1          SGP30_Init();   //初始化SGP30
+ 232   1          init_lcd();
+ 233   1          
+ 234   1          /*显示英文Temp：*/
+ 235   1          lcd_pos(0,0);
+ 236   1          lcd_display("Temp:");
+ 237   1          /*显示 CO2：*/
+ 238   1          lcd_pos(1,1);           
+ 239   1          lcd_display("CO2:"); 
+C51 COMPILER V9.57.0.0   MAIN                                                              10/20/2020 17:22:57 PAGE 5   
+
+ 240   1        
+ 241   1          display_data();
+ 242   1          while(1);
+ 243   1      
+ 244   1      
+ 245   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    967    ----
+   CONSTANT SIZE    =    195    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =     10      37
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
